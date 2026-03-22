@@ -88,6 +88,8 @@ type Access = {
   groups: Record<string, GroupPolicy>
   pending: Record<string, PendingEntry>
   mentionPatterns?: string[]
+  /** Bot user IDs whose messages should NOT be filtered out. Enables multi-agent communication — multiple Claude Code sessions can @mention each other in shared channels. */
+  trustedBots?: string[]
   // delivery/UX config — optional, defaults live in the reply handler
   /** Emoji to react with on receipt. Empty string disables. Unicode char or custom emoji ID. */
   ackReaction?: string
@@ -97,8 +99,6 @@ type Access = {
   textChunkLimit?: number
   /** Split on paragraph boundaries instead of hard char count. */
   chunkMode?: 'length' | 'newline'
-  /** Bot user IDs whose messages should NOT be filtered out. Lets sibling agents see each other. */
-  trustedBots?: string[]
 }
 
 function defaultAccess(): Access {
