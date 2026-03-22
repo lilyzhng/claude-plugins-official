@@ -98,6 +98,8 @@ type Access = {
   groups: Record<string, GroupPolicy>
   pending: Record<string, PendingEntry>
   mentionPatterns?: string[]
+  /** Bot user IDs whose messages should NOT be filtered out. Enables multi-agent communication — multiple Claude Code sessions can @mention each other in shared channels. */
+  trustedBots?: string[]
   // delivery/UX config — optional, defaults live in the reply handler
   /** Emoji to react with on receipt. Empty string disables. Unicode char or custom emoji ID. */
   ackReaction?: string
@@ -147,6 +149,7 @@ function readAccessFile(): Access {
       groups: parsed.groups ?? {},
       pending: parsed.pending ?? {},
       mentionPatterns: parsed.mentionPatterns,
+      trustedBots: parsed.trustedBots,
       ackReaction: parsed.ackReaction,
       replyToMode: parsed.replyToMode,
       textChunkLimit: parsed.textChunkLimit,
@@ -666,7 +669,10 @@ client.on('error', err => {
 })
 
 client.on('messageCreate', msg => {
-  if (msg.author.bot) return
+  if (msg.author.bot) {
+    const trusted = loadAccess().trustedBots ?? []
+    if (!trusted.includes(msg.author.id)) return
+  }
   handleInbound(msg).catch(e => process.stderr.write(`discord: handleInbound failed: ${e}\n`))
 })
 
