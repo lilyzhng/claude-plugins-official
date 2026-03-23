@@ -662,7 +662,11 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
                   // adjacent rows. History includes ungated senders (no-@mention
                   // messages in an opted-in channel never hit the gate but
                   // still live in channel history).
-                  const text = m.content.replace(/[\r\n]+/g, ' ⏎ ')
+                  const mentionResolved = m.content.replace(/<@!?(\d+)>/g, (match, id) => {
+                    const user = m.mentions.users.get(id) ?? client.users.cache.get(id)
+                    return user ? `@${user.username}` : match
+                  })
+                  const text = mentionResolved.replace(/[\r\n]+/g, ' ⏎ ')
                   return `[${m.createdAt.toISOString()}] ${who}: ${text}  (id: ${m.id}${atts})`
                 })
                 .join('\n')
@@ -829,9 +833,16 @@ async function handleInbound(msg: Message): Promise<void> {
     atts.push(`${safeAttName(att)} (${att.contentType ?? 'unknown'}, ${kb}KB)`)
   }
 
+  // Resolve <@ID> mentions to human-readable @username so the model knows
+  // who is being addressed without needing an external ID→name mapping.
+  const resolved = msg.content.replace(/<@!?(\d+)>/g, (match, id) => {
+    const user = msg.mentions.users.get(id) ?? client.users.cache.get(id)
+    return user ? `@${user.username}` : match
+  })
+
   // Attachment listing goes in meta only — an in-content annotation is
   // forgeable by any allowlisted sender typing that string.
-  const content = msg.content || (atts.length > 0 ? '(attachment)' : '')
+  const content = resolved || (atts.length > 0 ? '(attachment)' : '')
 
   void mcp.notification({
     method: 'notifications/claude/channel',
