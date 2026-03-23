@@ -281,7 +281,7 @@ async function gate(msg: Message): Promise<GateResult> {
   const channelId = msg.channel.isThread()
     ? msg.channel.parentId ?? msg.channelId
     : msg.channelId
-  const policy = access.groups[channelId]
+  const policy = access.groups[channelId] ?? access.groups['*']
   if (!policy) return { action: 'drop' }
   const groupAllowFrom = policy.allowFrom ?? []
   const requireMention = policy.requireMention ?? true
@@ -410,7 +410,7 @@ async function fetchAllowedChannel(id: string) {
     if (access.allowFrom.includes(ch.recipientId)) return ch
   } else {
     const key = ch.isThread() ? ch.parentId ?? ch.id : ch.id
-    if (key in access.groups) return ch
+    if (key in access.groups || '*' in access.groups) return ch
   }
   throw new Error(`channel ${id} is not allowlisted — add via /discord:access`)
 }
