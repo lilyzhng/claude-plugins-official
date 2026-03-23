@@ -57,6 +57,26 @@ if (!TOKEN) {
 }
 const INBOX_DIR = join(STATE_DIR, 'inbox')
 
+// Resolve <@ID>, <@&ID>, and <#ID> mentions to human-readable names so the
+// model knows who/what is being referenced. For historical messages fetched
+// via REST, mentions.users may be incomplete — client.users.cache covers
+// users the bot has seen on the gateway.
+function resolveMentions(content: string, msg: Message): string {
+  return content
+    .replace(/<@!?(\d+)>/g, (match, id) => {
+      const user = msg.mentions.users.get(id) ?? client.users.cache.get(id)
+      return user ? `@${user.username}` : match
+    })
+    .replace(/<@&(\d+)>/g, (match, id) => {
+      const role = msg.guild?.roles.cache.get(id)
+      return role ? `@${role.name}` : match
+    })
+    .replace(/<#(\d+)>/g, (match, id) => {
+      const channel = client.channels.cache.get(id)
+      return channel && 'name' in channel ? `#${channel.name}` : match
+    })
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.DirectMessages,
@@ -662,11 +682,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
                   // adjacent rows. History includes ungated senders (no-@mention
                   // messages in an opted-in channel never hit the gate but
                   // still live in channel history).
-                  const mentionResolved = m.content.replace(/<@!?(\d+)>/g, (match, id) => {
-                    const user = m.mentions.users.get(id) ?? client.users.cache.get(id)
-                    return user ? `@${user.username}` : match
-                  })
-                  const text = mentionResolved.replace(/[\r\n]+/g, ' ⏎ ')
+                  const text = resolveMentions(m.content, m).replace(/[\r\n]+/g, ' ⏎ ')
                   return `[${m.createdAt.toISOString()}] ${who}: ${text}  (id: ${m.id}${atts})`
                 })
                 .join('\n')
@@ -833,16 +849,9 @@ async function handleInbound(msg: Message): Promise<void> {
     atts.push(`${safeAttName(att)} (${att.contentType ?? 'unknown'}, ${kb}KB)`)
   }
 
-  // Resolve <@ID> mentions to human-readable @username so the model knows
-  // who is being addressed without needing an external ID→name mapping.
-  const resolved = msg.content.replace(/<@!?(\d+)>/g, (match, id) => {
-    const user = msg.mentions.users.get(id) ?? client.users.cache.get(id)
-    return user ? `@${user.username}` : match
-  })
-
   // Attachment listing goes in meta only — an in-content annotation is
   // forgeable by any allowlisted sender typing that string.
-  const content = resolved || (atts.length > 0 ? '(attachment)' : '')
+  const content = resolveMentions(msg.content, msg) || (atts.length > 0 ? '(attachment)' : '')
 
   void mcp.notification({
     method: 'notifications/claude/channel',
