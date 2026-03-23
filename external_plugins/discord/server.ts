@@ -600,6 +600,21 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'create_thread',
+      description:
+        'Create a new public thread on a message in Discord. Returns the thread channel ID so you can send follow-up messages in it via reply with thread_id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          chat_id: { type: 'string', description: 'The channel ID where the message lives.' },
+          message_id: { type: 'string', description: 'The message ID to start a thread on.' },
+          name: { type: 'string', description: 'Thread name (max 100 chars).' },
+          text: { type: 'string', description: 'Optional first message to send in the thread.' },
+        },
+        required: ['chat_id', 'message_id', 'name'],
+      },
+    },
+    {
       name: 'create_poll',
       description:
         'Create a Discord poll in a channel. Polls allow users to vote on multiple choice options. Max 10 answers, duration 1-768 hours (default 24).',
@@ -766,6 +781,24 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         const msg = await ch.messages.fetch(args.message_id as string)
         const edited = await msg.edit(args.text as string)
         return { content: [{ type: 'text', text: `edited (id: ${edited.id})` }] }
+      }
+      case 'create_thread': {
+        const ch = await fetchAllowedChannel(args.chat_id as string)
+        const msg = await ch.messages.fetch(args.message_id as string)
+        const threadName = (args.name as string).slice(0, 100)
+        const thread = await msg.startThread({ name: threadName })
+        const text = args.text as string | undefined
+        if (text) {
+          const access = loadAccess()
+          const limit = Math.max(1, Math.min(access.textChunkLimit ?? MAX_CHUNK_LIMIT, MAX_CHUNK_LIMIT))
+          const mode = access.chunkMode ?? 'length'
+          const chunks = chunk(text, limit, mode)
+          for (const c of chunks) {
+            const sent = await thread.send({ content: c })
+            noteSent(sent.id)
+          }
+        }
+        return { content: [{ type: 'text', text: `thread created (id: ${thread.id}, name: "${threadName}")` }] }
       }
       case 'create_poll': {
         const chat_id = args.chat_id as string
